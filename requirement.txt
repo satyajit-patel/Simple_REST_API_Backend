@@ -1,0 +1,17 @@
+npm init
+
+mockaroo.com to get dummy data
+
+npm install express dotenv
+
+node server.js
+
+// task
+REST API - JSON
+
+GET /users - list all users
+
+POST /api/users/:1   - create new user
+GET /api/users/:1    - read the user with id 1
+PATCH /api/users/:1  - update the user with id 1
+DELETE /api/users/:1 - delete the user with id 1
