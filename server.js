@@ -7,9 +7,18 @@ const PORT = process.env.PORT;
 const DB_CONNECT = process.env.DB_CONNECT;
 
 // db connection
-mongoose.connect(DB_CONNECT)
-.then(() => console.log("db connected"))
-.catch((err) => console.log("db_connect err", err));
+const dbConnect = async () => {
+    try {
+        await mongoose.connect(DB_CONNECT);
+        console.log("db connected");
+    } catch(err) {
+        console.log("db_connect err\n", err.message);
+        process.exit(1);
+        // return -> terminate's funtion and returns back to calling funtion
+        // process.exit -> terminate's NODE.js process. with sign 0->success, non_zero->failure
+    }
+}
+dbConnect();
 const studentSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -26,21 +35,32 @@ const studentSchema = new mongoose.Schema({
 }, {timestamps: true});
 const students = mongoose.model("studentColl", studentSchema);
 
+async function isContailsAnyLetter(s) { // own funtion
+    for(let i=0; i<s.length; i++) {
+        if(s[i] <= 'z' && s[i] >= 'a') {
+            return true;
+        }
+    }
+    return false;
+}
+
 // middleware's
 app.use(express.json());
 app.use(express.urlencoded({extended: false}));
 app.use(async (req, res, next) => {
-    const body = req.body;
-    if(!body || !body.name || !body.roll || !body.email) {
-        return res.status(400).json({msg: "all fields are req.."});
+    if(req.method === 'POST' || req.method == "PATCH") {
+        const body = req.body;
+        if (!body || !body.name || !body.roll || !body.email) {
+            console.log("All fields are required");
+            return res.status(400).json({ msg: "All fields are required"});
+        }
+    } else if(['GET', 'DELETE'].includes(req.method)) {
+        const count = await students.countDocuments();
+        if (count === 0) {
+            console.log("collection is empty");
+            return res.status(400).json({msg: "empty collection. First fill some data"});
+        }
     }
-
-    const count = await students.countDocuments();
-    if(count == 0) {
-        console.log("db is empty");
-        return res.status(400).json({msg: "empty database.. first fill some data"});
-    }
-
     next();
 });
 // api's
@@ -56,9 +76,9 @@ app.post("/api/students", async (req, res) => {
             email: body.email
         });
         console.log("data created");
-        return res.status(200).json({msg: result});
+        return res.status(201).json({msg: result});
     } catch(err) {
-        console.log("data creation err", err);
+        console.log("data creation err\n", err.message);
         return res.status(500).json({msg: err.message});
     }
 });
@@ -68,50 +88,88 @@ app.get("/api/students", async (req, res) => {
         console.log("all data sent");
         return res.status(200).json({msg: result});
     } catch(err) {
-        console.log("all data fetching err", err.message);
+        console.log("all data fetching err\n", err.message);
         return res.status(500).json({msg: err.message});
+    }
+});
+app.delete("/api/students", async (req, res) => {
+    try {
+        await students.deleteMany({});
+        console.log("all dta deleted");
+        res.status(200).json({msg: "all data deleted"});
+    } catch(err) {
+        console.log("all data deletion err\n", err.message);
+        res.status(500).json({msg: err.message});
     }
 });
 app.route("/api/students/:id")
-.get((req, res) => {
+.get(async (req, res) => {
     try {
-        const roll = Number(req.params.id);
-        const student = students.find((student) => student.roll == roll);
-        console.log("one data sent");
-        return res.status(200).json({msg: student});
+        const id = req.params.id;
+        flag = await isContailsAnyLetter(id);
+        if(flag) {
+            if(mongoose.Types.ObjectId.isValid(id)) {
+                const result = await students.findById(id);
+                if(!result) {
+                    console.log("student not found");
+                    return res.status(404).json({msg: "student not found"});
+                }
+                console.log("one data sent");
+                return res.status(200).json({msg: result});
+            }
+            console.log("student not found");
+            return res.status(404).json({msg: "student not found"});
+        } else {
+            const roll = Number(id);
+            const result = await students.findOne({roll: roll});
+            if(!result || roll == NaN) {
+                console.log("student not found");
+                return res.status(404).json({msg: "student not found"});
+            }
+            console.log("one data sent");
+            return res.status(200).json({msg: result});
+        }
     } catch(err) {
-        console.log("one data fetching err", err.message);
+        console.log("one data fetching err\n", err.message);
         return res.status(500).json({msg: err.message});
     }
 })
-.patch((req, res) => {
+.patch(async (req, res) => {
     try {
         const roll = Number(req.params.id);
-        const student = students.find((student) => student.roll == roll);
+        const body = req.body;
+        const result = await students.findOneAndUpdate(
+            {roll: roll},
+            {$set: body},
+            {new: true, runValidator: true}
+            // Options: `new` returns the updated document, `runValidators` ensures validation
+        );
+        if (!result) {
+            console.log("student not found");
+            return res.status(404).json({msg: "student not found"});
+        }
         console.log("one data updated");
-        return res.status(200).json({msg: student});
+        return res.status(200).json({msg: result});
     } catch(err) {
-        console.log("one data updation err", err.message);
+        console.log("one data updation err\n", err.message);
         return res.status(500).json({msg: err.message});
     }
 })
-.delete((req, res) => {
+.delete(async (req, res) => {
     try {
         const roll = Number(req.params.id);
-        const student = students.find((student) => student.roll == roll);
+        const result = await students.findOneAndDelete({roll: roll});
+        if (!result) {
+            console.log("student not found");
+            return res.status(404).json({msg: "student not found"});
+        }
         console.log("one data deleted");
-        return res.status(200).json({msg: student});
+        return res.status(200).json({msg: result});
     } catch(err) {
-        console.log("one data deletion err", err.message);
+        console.log("one data deletion err\n", err.message);
         return res.status(500).json({msg: err.message});
     }
 });
-/*
-    status
-        200-299 -> success
-        400-499 -> client side error
-        500-599 -> server side error
-*/
 
 
 app.listen(PORT, () => {
