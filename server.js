@@ -86,6 +86,7 @@ app.get("/api/students", async (req, res) => {
     try {
         const result = await students.find({});
         console.log("all data sent");
+        res.setHeader("X-myName", "Satyajit Patel"); // custum header(X)
         return res.status(200).json({msg: result});
     } catch(err) {
         console.log("all data fetching err\n", err.message);
